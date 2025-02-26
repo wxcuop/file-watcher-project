@@ -20,12 +20,12 @@ FILE_NAME_PATTERN = config['flows']['demoFlow_1']['pattern']
 DATABASE_CONFIG = {
     'dbname': config['shared']['dmDevDatabase']['url'].split('/')[-1],
     'user': config['shared']['dmDevDatabase']['username'],
-    'password': config['shared']['dmDevDatabase']['password'],
+    'password': os.getenv('DB_PASSWORD'),
     'host': config['shared']['dmDevDatabase']['url'].split('//')[1].split('/')[0],
     'port': '5432'
 }
 KAFKA_TOPIC = "env.delivery-manager"
-KAFKA_SERVER = "your_kafka_server"
+KAFKA_SERVER = os.getenv('KAFKA_SERVER')
 ARCHIVE_DIR = config['flows']['demoFlow_1']['archiveDirectory']
 
 # Initialize Kafka Producer
