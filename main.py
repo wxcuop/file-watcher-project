@@ -4,30 +4,29 @@ import shutil
 import fnmatch
 import boto3
 import psycopg2
-import pyodbc
+import pandas as pd
+import json
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from lxml import etree
 from kafka import KafkaProducer
-import pandas as pd
+
+# Load configuration from JSON file
+with open("config.json", 'r') as config_file:
+    config = json.load(config_file)
 
 # Configuration
-DIRECTORIES_TO_WATCH = ["/path/to/dir1", "/path/to/dir2"]
-FILE_NAME_PATTERN = "trades-*.csv"
-XML_CONTENT_FILTER = "//portfolio[@id='XTANG_TST']"
+DIRECTORIES_TO_WATCH = [config['flows']['demoFlow_1']['sourceDirectory']]
+FILE_NAME_PATTERN = config['flows']['demoFlow_1']['pattern']
 DATABASE_CONFIG = {
-    'dbname': 'your_db',
-    'user': 'your_user',
-    'password': 'your_password',
-    'host': 'your_host',
-    'port': 'your_port'
+    'dbname': config['shared']['dmDevDatabase']['url'].split('/')[-1],
+    'user': config['shared']['dmDevDatabase']['username'],
+    'password': config['shared']['dmDevDatabase']['password'],
+    'host': config['shared']['dmDevDatabase']['url'].split('//')[1].split('/')[0],
+    'port': '5432'
 }
-S3_BUCKET = "your_s3_bucket"
-S3_REGION = "your_s3_region"
-KAFKA_TOPIC = "your_kafka_topic"
+KAFKA_TOPIC = "env.delivery-manager"
 KAFKA_SERVER = "your_kafka_server"
-ARCHIVE_DIR = "/path/to/archive"
-DELETE_DIR = "/dev/null"
+ARCHIVE_DIR = config['flows']['demoFlow_1']['archiveDirectory']
 
 # Initialize Kafka Producer
 producer = KafkaProducer(bootstrap_servers=KAFKA_SERVER)
@@ -57,12 +56,9 @@ class Handler(FileSystemEventHandler):
         elif event.event_type == 'created' or event.event_type == 'modified':
             file_path = event.src_path
             if fnmatch.fnmatch(file_path, FILE_NAME_PATTERN):
-                if file_path.endswith('.csv') or file_path.endswith('.xlsx'):
-                    import_to_database(file_path)
-                    upload_to_s3(file_path)
-                    archive_file(file_path)
-                    delete_file(file_path)
-                    send_kafka_notification(file_path)
+                import_to_database(file_path)
+                send_kafka_notification(file_path)
+                move_file(file_path)
 
     def on_created(self, event):
         self.process(event)
@@ -70,39 +66,19 @@ class Handler(FileSystemEventHandler):
     def on_modified(self, event):
         self.process(event)
 
-# Function to import CSV/XLSX to database
 def import_to_database(file_path):
-    # Truncate the table
-    with psycopg2.connect(**DATABASE_CONFIG) as conn:
-        with conn.cursor() as cur:
-            cur.execute("TRUNCATE TABLE your_table")
-            conn.commit()
+    conn = psycopg2.connect(**DATABASE_CONFIG)
+    df = pd.read_csv(file_path)
+    df.to_sql('flow_demo', conn, if_exists='append', index=False)
+    conn.close()
 
-    # Import file content
-    if file_path.endswith('.csv'):
-        df = pd.read_csv(file_path)
-    elif file_path.endswith('.xlsx'):
-        df = pd.read_excel(file_path)
-
-    df.to_sql('your_table', conn, if_exists='append', index=False)
-
-# Function to upload file to S3
-def upload_to_s3(file_path):
-    s3_client = boto3.client('s3', region_name=S3_REGION)
-    s3_client.upload_file(file_path, S3_BUCKET, os.path.basename(file_path))
-
-# Function to archive file
-def archive_file(file_path):
-    shutil.move(file_path, os.path.join(ARCHIVE_DIR, os.path.basename(file_path)))
-
-# Function to delete file
-def delete_file(file_path):
-    shutil.move(file_path, DELETE_DIR)
-
-# Function to send Kafka notification
 def send_kafka_notification(file_path):
-    producer.send(KAFKA_TOPIC, key=b'file_flow_complete', value=file_path.encode())
+    with open(file_path, 'r') as file:
+        producer.send(KAFKA_TOPIC, key=b'file_flow_complete', value=file.read().encode())
     producer.flush()
+
+def move_file(file_path):
+    shutil.move(file_path, os.path.join(ARCHIVE_DIR, os.path.basename(file_path)))
 
 if __name__ == '__main__':
     watcher = Watcher(DIRECTORIES_TO_WATCH)
