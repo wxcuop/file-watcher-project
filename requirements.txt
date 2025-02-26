@@ -1,0 +1,7 @@
+watchdog
+lxml
+kafka-python
+pandas
+boto3
+psycopg2
+pyodbc
