@@ -1,0 +1,27 @@
+{
+  "shared": {
+    "dmDevDatabase": {
+      "url": "jdbc:log4jdbc:postgresql://o2-trader-rw.cm9923-private.coremont.com/dm-dev",
+      "username": "postgres"
+    }
+  },
+  "flows": {
+    "demoFlow_1": {
+      "sourceDirectory": "C:\\temp\\dm-demo\\source",
+      "pattern": "*.csv*",
+      "s3": {
+        "name": "jb.test",
+        "directory": "test"
+      },
+      "pollRateInSeconds": 10,
+      "addDateSuffix": true,
+      "loadTable": {
+        "url": "${shared.dmDevDatabase.url}",
+        "username": "${shared.dmDevDatabase.username}",
+        "table": "flow_demo",
+        "columnHeaders": true
+      },
+      "archiveDirectory": "C:\\temp\\dm-demo\\destination"
+    }
+  }
+}
